@@ -1,19 +1,16 @@
-train_file: ['data/vqa_train.json',
-             'data/vqa_val.json',   
-             'data/vg_qa.json']
+train_file: [data/vqa_val_updated.json]
              
-test_file: ['data/vqa_test.json']
+test_file: ['data/vqa_val_updated.json']
 ## val_file: ['data/vqa_val_updated.json']
 answer_list: 'data/answer_list.json'
 
-vqa_root: '/home/crk/Desktop/ALBEF/mscoco/images/' #train2014/
-vg_root: '/home/crk/Desktop/ALBEF/images/VG_100K/'  #image/
+vqa_root: '/home/beast/Downloads/' #train2014/
+vg_root: '/home/beast/Downloads/VG_100k/'  #image/
 
 image_res: 224
-batch_size_train: 4
-batch_size_test: 4
-k_test: 4
-
+batch_size_train: 16
+batch_size_test: 16
+k_test: 8
 alpha: 0.4
 distill: True
 warm_up: True

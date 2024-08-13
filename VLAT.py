@@ -139,36 +139,37 @@ def main(args, config):
     optimizer = create_optimizer(arg_opt, model)
     arg_sche = utils.AttrDict(config['schedular'])
     lr_scheduler, _ = create_scheduler(arg_sche, optimizer)  
-    # for epoch in range(start_epoch, max_epoch):
-    #     for i, (image, question, answer, weights, n) in enumerate(train_loader):
-    #         image, weights = image.to(device, non_blocking=True), weights.to(device, non_blocking=True)
-    #         question_input = tokenizer(question, padding='longest', truncation=True, max_length=25, return_tensors="pt").to(device)
-    #         answer_input = tokenizer(answer, padding='longest', return_tensors="pt").to(device)
-    #         loss = model(image, question_input, answer_input, weights, n)
+    for epoch in range(start_epoch, max_epoch):
+        for i, (image, question, answer, weights, n) in enumerate(train_loader):
+            image, weights = image.to(device, non_blocking=True), weights.to(device, non_blocking=True)
+            question_input = tokenizer(question, padding='longest', truncation=True, max_length=25, return_tensors="pt").to(device)
+            answer_input = tokenizer(answer, padding='longest', return_tensors="pt").to(device)
+            loss = model(image, question_input, answer_input, weights, n)
 
-    #         optimizer.zero_grad()
+            optimizer.zero_grad()
 
-    #         loss.backward()
+            loss.backward()
 
-    #         optimizer.step()
+            optimizer.step()
             
-    #         # Print loss every 50 batches
-    #         if (i + 1) % 50 == 0:
-    #             print(f"Epoch [{epoch + 1}/{max_epoch}], Batch [{i + 1}], Loss: {loss.item()}") 
-    #     save_obj = {
-    #             'model': model.state_dict(),
-    #             'optimizer': optimizer.state_dict(),
-    #             'lr_scheduler': lr_scheduler.state_dict(),
-    #             'config': config,
-    #             'epoch': epoch,
-    #         }
-    #     torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_%02d.pth'%epoch))  
-    checkpoint = torch.load("/home/beast/Desktop/Daniel/charan_anna/VLAT/output/vqa/checkpoint_04.pth")
-    model.load_state_dict(checkpoint['model'])
-    # start_epoch = checkpoint['epoch']
-    epoch = 5
+            # Print loss every 50 batches
+            if (i + 1) % 50 == 0:
+                print(f"Epoch [{epoch + 1}/{max_epoch}], Batch [{i + 1}], Loss: {loss.item()}") 
+        save_obj = {
+                'model': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'lr_scheduler': lr_scheduler.state_dict(),
+                'config': config,
+                'epoch': epoch,
+            }
+        if epoch % 10 == 0:
+            torch.save(save_obj, os.path.join(args.output_dir, 'checkpoint_updated_%02d.pth'%epoch))  
+    # checkpoint = torch.load("/home/beast/Desktop/Daniel/charan_anna/VLAT/output/vqa/checkpoint_updated_100.pth")
+    # model.load_state_dict(checkpoint['model'])
+    # # start_epoch = checkpoint['epoch']
+    # epoch = 5
     vqa_result = evaluation(model, test_loader, tokenizer, device, config)        
-    result_file = save_result(vqa_result, args.result_dir, 'vqa_result_epoch%d'%epoch)
+    result_file = save_result(vqa_result, args.result_dir, 'vqa_result_epoch%d'%100)
                      
  
     

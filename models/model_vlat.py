@@ -225,17 +225,17 @@ class VLAT(nn.Module):
         
         # print("Encoder_decoder Block output", text_embeddings)
         if train:
-            question_output = self.text_encoder_1(questions.input_ids, 
-                                                    attention_mask = questions.attention_mask, 
-                                                    encoder_hidden_states = image_embeddings,
-                                                    encoder_attention_mask = image_atts,                             
-                                                    return_dict = True)
+            # question_output = self.text_encoder_1(questions.input_ids, 
+            #                                         attention_mask = questions.attention_mask, 
+            #                                         encoder_hidden_states = image_embeddings,
+            #                                         encoder_attention_mask = image_atts,                             
+            #                                         return_dict = True)
             question_states = []                
             question_atts = []
             # print(question_output.last_hidden_state.shape, text_embeddings.shape)  
             for b, n in enumerate(k):
-                question_states += [question_output["last_hidden_state"][b]]*n
-                # question_states += [text_embeddings[b]]*n
+                # question_states += [question_output["last_hidden_state"][b]]*n
+                question_states += [text_embeddings[b]]*n
                 question_atts += [questions.attention_mask[b]]*n 
             question_states = torch.stack(question_states,0)    
             question_atts = torch.stack(question_atts,0)   
@@ -254,11 +254,11 @@ class VLAT(nn.Module):
 
             return loss
         else:
-            question_output = self.text_encoder_1(questions.input_ids, 
-                                                attention_mask = questions.attention_mask, 
-                                                encoder_hidden_states = image_embeddings,
-                                                encoder_attention_mask = image_atts, return_dict = True)
+            # question_output = self.text_encoder_1(questions.input_ids, 
+            #                                     attention_mask = questions.attention_mask, 
+            #                                     encoder_hidden_states = image_embeddings,
+            #                                     encoder_attention_mask = image_atts, return_dict = True)
             # print(question_output)                   
-            topk_ids, topk_probs = self.rank_answer(question_output["last_hidden_state"], questions.attention_mask, 
+            topk_ids, topk_probs = self.rank_answer(text_embeddings, questions.attention_mask, 
                                                     answer.input_ids, answer.attention_mask, k) 
             return topk_ids, topk_probs

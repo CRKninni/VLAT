@@ -56,8 +56,8 @@ class SelfAttention(nn.Module):
         )
         self.norm1 = nn.LayerNorm(hidden_size)
         self.norm2 = nn.LayerNorm(hidden_size)
-        self.dropout1 = nn.Dropout(0.1)
-        self.dropout2 = nn.Dropout(0.1)
+        self.dropout1 = nn.Dropout(0.4)
+        self.dropout2 = nn.Dropout(0.4)
 
     def forward(self, x, mask=None):
         attn_output, _ = self.mhatt(x, x, x, attn_mask=mask)
@@ -78,8 +78,8 @@ class GuidedAttention(nn.Module):
         )
         self.norm1 = nn.LayerNorm(hidden_size)
         self.norm2 = nn.LayerNorm(hidden_size)
-        self.dropout1 = nn.Dropout(0.1)
-        self.dropout2 = nn.Dropout(0.1)
+        self.dropout1 = nn.Dropout(0.4)
+        self.dropout2 = nn.Dropout(0.4)
 
     def forward(self, x, y, x_mask=None, y_mask=None):
         # Cross-attention between x and y
@@ -112,9 +112,10 @@ class EncoderDecoder(nn.Module):
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self, pretrained=True, output_dim=768):
+    def __init__(self, pretrained=True, image_size=224, output_dim=768):
         super(ImageEncoder, self).__init__()
-        self.vit_model = ViTModel.from_pretrained('google/vit-base-patch16-224-in21k') if pretrained else ViTModel(ViTConfig(image_size=224, patch_size=16, embed_dim=768, mlp_ratio=4, qkv_bias=True, layer_norm_eps=1e-6))
+        # self.vit_model = ViTModel.from_pretrained('google/vit-base-patch16-224-in21k') if pretrained else ViTModel(ViTConfig(image_size=image_size, patch_size=16, embed_dim=768, mlp_ratio=4, qkv_bias=True, layer_norm_eps=1e-6))
+        self.vit_model = ViTModel(ViTConfig(image_size=image_size, patch_size=16, embed_dim=768, mlp_ratio=4, qkv_bias=True, layer_norm_eps=1e-6))
     def forward(self, images):
         outputs = self.vit_model(images)
         # print(outputs)
@@ -127,7 +128,7 @@ class TextEncoder(nn.Module):
         super(TextEncoder, self).__init__()
         self.tokenizer = BertTokenizer.from_pretrained(model_name)
 
-        text_config_encoder = BertConfig(vocab_size=30522, num_hidden_layers=12, num_attention_heads=12, hidden_size=768, layer_norm_eps=1e-12, max_position_embeddings=768, hidden_act="gelu", hidden_dropout_prob=0.1, initializer_range=0.02, intermediate_size=3072, attention_probs_dropout_prob=0.1)   
+        text_config_encoder = BertConfig(vocab_size=30522, num_hidden_layers=12, num_attention_heads=12, hidden_size=768, layer_norm_eps=1e-12, max_position_embeddings=768, hidden_act="gelu", hidden_dropout_prob=0.2, initializer_range=0.02, intermediate_size=3072, attention_probs_dropout_prob=0.2)   
         self.bert = BertModel(config=text_config_encoder)
         # self.linear = nn.Linear(text_config_encoder.hidden_size, output_dim)
 
@@ -141,21 +142,147 @@ class TextEncoder(nn.Module):
 class VLAT(nn.Module):
     def __init__(self):
         super(VLAT, self).__init__()
+        # embed_dim = 256
+        # self.queue_size = 65536
+        # self.mlm_probability = 0.15
         self.image_encoder = ImageEncoder()
         self.text_encoder = TextEncoder()
         self.encoder_decoder = EncoderDecoder()
-        text_config_encoder = BertConfig(vocab_size=30522, num_hidden_layers=12, num_attention_heads=12, hidden_size=768, layer_norm_eps=1e-12, max_position_embeddings=512, hidden_act="gelu", hidden_dropout_prob=0.1, initializer_range=0.02, intermediate_size=3072, attention_probs_dropout_prob=0.1)   
+        
+        # self.image_encoder_m = ViTModel(ViTConfig(image_size=224, patch_size=16, embed_dim=768, mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6)))
+        text_config_encoder = BertConfig(vocab_size=30522, num_hidden_layers=12, num_attention_heads=12, hidden_size=768, layer_norm_eps=1e-12, max_position_embeddings=512, hidden_act="gelu", hidden_dropout_prob=0.2, initializer_range=0.02, intermediate_size=3072, attention_probs_dropout_prob=0.2)   
         self.text_encoder_1 = BertModel(config=text_config_encoder)
         config_decoder = BertConfig.from_json_file("/home/beast/Desktop/Daniel/charan_anna/VLAT/configs/config_bert.json")
         config_decoder.fusion_layer = 0
         config_decoder.num_hidden_layers = 6
         self.text_decoder = BertLMHeadModel.from_pretrained("bert-base-uncased", config=config_decoder)   
         self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased") 
+        # self.vision_proj = nn.Linear(768, embed_dim)
+        # self.vision_proj_m = nn.Linear(768, embed_dim)
+        # self.text_proj = nn.Linear(768, embed_dim)         
+        # self.text_proj_m = nn.Linear(768, embed_dim)  
+        # self.temp = nn.Parameter(torch.ones([]) * 0.07) 
+        # self.momentum = 0.995
+        # self.register_buffer("image_queue", torch.randn(embed_dim, self.queue_size))
+        # self.register_buffer("text_queue", torch.randn(embed_dim, self.queue_size))
+        # self.register_buffer("queue_ptr", torch.zeros(1, dtype=torch.long))  
+                             
+        # self.image_queue = nn.functional.normalize(self.image_queue, dim=0)
+        # self.text_queue = nn.functional.normalize(self.text_queue, dim=0)
+
+
+        # self.model_pairs = [[self.image_encoder,self.image_encoder_m],
+        #                     [self.vision_proj,self.vision_proj_m],
+        #                     [self.text_encoder,self.text_encoder_m],
+        #                     [self.text_proj,self.text_proj_m],
+        #                    ]
+
 
     def make_mask(self, batch_size=16, num_heads=8, S=12):
         binary_mask = torch.randint(0, 2, (batch_size * num_heads, S, S), dtype=torch.bool)
         float_mask = binary_mask.float().masked_fill(binary_mask, float('-inf'))
         return float_mask
+
+    
+
+    def forward(self, image, questions, answer, weights, k, train=True, alpha=0.4):
+        
+        image_features = self.image_encoder(image) # (16. 3, 224, 224) -->  (batch_size, num_patches+1, hidden_dim) # (16, 197, 768) # 16*1,51,296*3
+        image_atts = torch.ones(image_features.size()[:-1],dtype=torch.long).to(image.device)
+
+        # image_feat = F.normalize(self.vision_proj(image_features[:,0,:]),dim=-1)  
+
+        question_features = self.text_encoder(questions) #input_ids-->(16, sequence_length), (16, sequence_length,768) # (batch_size, sequence_length, hidden_dim), (16, 11, 768) #16*8448*3
+        
+        # itc 
+        image_embeddings, text_embeddings = self.encoder_decoder(image_features, question_features) # need to Mask, with mask and without masking # mcan
+        
+        # text_feat = F.normalize(self.text_proj(text_embeddings[:,0,:]),dim=-1)
+
+        answer_targets = answer.input_ids.masked_fill(answer.input_ids == self.tokenizer.pad_token_id, -100) 
+        
+        if train:
+            question_output = self.text_encoder_1(attention_mask = questions.attention_mask, 
+                                                  inputs_embeds = text_embeddings, 
+                                                  encoder_hidden_states = image_embeddings,
+                                                    encoder_attention_mask = image_atts,                             
+                                                    return_dict = True)
+            # ITM MLM 
+            question_states = []                
+            question_atts = []
+            # print(question_output.last_hidden_state.shape, text_embeddings.shape)  
+            for b, n in enumerate(k):
+                question_states += [question_output["last_hidden_state"][b]]*n
+                # question_states += [text_embeddings[b]]*n
+                question_atts += [questions.attention_mask[b]]*n 
+            question_states = torch.stack(question_states,0)    
+            question_atts = torch.stack(question_atts,0)   
+
+            answer_output = self.text_decoder(answer.input_ids, 
+                                                    attention_mask = answer.attention_mask, 
+                                                    encoder_hidden_states = question_states,
+                                                    encoder_attention_mask = question_atts,                  
+                                                    labels = answer_targets,
+                                                    return_dict = True, reduction = "none")
+            
+            loss = weights * answer_output.loss         
+            loss = loss.sum()/image.size(0)
+            return loss
+        else:
+            # question_output = self.text_encoder_1(questions.input_ids, 
+            #                                     attention_mask = questions.attention_mask, 
+            #                                     encoder_hidden_states = image_embeddings,
+            #                                     encoder_attention_mask = image_atts, return_dict = True)
+            question_output = self.text_encoder_1(attention_mask = questions.attention_mask, 
+                                                  inputs_embeds = text_embeddings, 
+                                                  encoder_hidden_states = image_embeddings,
+                                                    encoder_attention_mask = image_atts,                             
+                                                    return_dict = True)
+            # print(question_output)                   
+            topk_ids, topk_probs = self.rank_answer(text_embeddings, questions.attention_mask, 
+                                                    answer.input_ids, answer.attention_mask, k) 
+            return topk_ids, topk_probs
+
+
+    @torch.no_grad()        
+    def _momentum_update(self):
+        for model_pair in self.model_pairs:           
+            for param, param_m in zip(model_pair[0].parameters(), model_pair[1].parameters()):
+                param_m.data = param_m.data * self.momentum + param.data * (1. - self.momentum)
+                
+    @torch.no_grad()    
+    def copy_params(self):
+        for model_pair in self.model_pairs:           
+            for param, param_m in zip(model_pair[0].parameters(), model_pair[1].parameters()):
+                param_m.data.copy_(param.data)  # initialize
+                param_m.requires_grad = False  # not update by gradient    
+
+    def mask(self, input_ids, vocab_size, device, targets=None, masked_indices=None, probability_matrix=None):
+        if masked_indices is None:                                       
+            masked_indices = torch.bernoulli(probability_matrix).bool()
+                                               
+        masked_indices[input_ids == self.tokenizer.pad_token_id] = False
+        masked_indices[input_ids == self.tokenizer.cls_token_id] = False
+        
+        if targets is not None:
+            targets[~masked_indices] = -100 # We only compute loss on masked tokens            
+
+        # 80% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
+        indices_replaced = torch.bernoulli(torch.full(input_ids.shape, 0.8)).bool() & masked_indices
+        input_ids[indices_replaced] = self.tokenizer.mask_token_id
+
+        # 10% of the time, we replace masked input tokens with random word
+        indices_random = torch.bernoulli(torch.full(input_ids.shape, 0.5)).bool() & masked_indices & ~indices_replaced
+        random_words = torch.randint(vocab_size, input_ids.shape, dtype=torch.long).to(device)
+        input_ids[indices_random] = random_words[indices_random]                     
+        # The rest of the time (10% of the time) we keep the masked input tokens unchanged   
+        
+        if targets is not None:
+            return input_ids, targets
+        else:
+            return input_ids
+        
+
 
     def rank_answer(self, question_states, question_atts, answer_ids, answer_atts, k):
         
@@ -212,53 +339,36 @@ class VLAT(nn.Module):
         topk_ids = torch.gather(topk_ids, 1, rerank_id)    
 
         return topk_ids, topk_probs
+    
 
-    def forward(self, image, questions, answer, weights, k, train=True):
-        
-        image_features = self.image_encoder(image) # (16. 3, 224, 224) -->  (batch_size, num_patches+1, hidden_dim) # (16, 197, 768) # 16*1,51,296*3
-        image_atts = torch.ones(image_features.size()[:-1],dtype=torch.long).to(image.device)
-        # print("aaa",questions.attention_mask.shape, image_atts.shape)
-        question_features = self.text_encoder(questions) #input_ids-->(16, sequence_length), (16, sequence_length,768) # (batch_size, sequence_length, hidden_dim), (16, 11, 768) #16*8448*3
-        image_embeddings, text_embeddings = self.encoder_decoder(image_features, question_features) # need to Mask, with mask and without masking # mcan
-        
-        answer_targets = answer.input_ids.masked_fill(answer.input_ids == self.tokenizer.pad_token_id, -100) 
-        
-        # print("Encoder_decoder Block output", text_embeddings)
-        if train:
-            # question_output = self.text_encoder_1(questions.input_ids, 
-            #                                         attention_mask = questions.attention_mask, 
-            #                                         encoder_hidden_states = image_embeddings,
-            #                                         encoder_attention_mask = image_atts,                             
-            #                                         return_dict = True)
-            question_states = []                
-            question_atts = []
-            # print(question_output.last_hidden_state.shape, text_embeddings.shape)  
-            for b, n in enumerate(k):
-                # question_states += [question_output["last_hidden_state"][b]]*n
-                question_states += [text_embeddings[b]]*n
-                question_atts += [questions.attention_mask[b]]*n 
-            question_states = torch.stack(question_states,0)    
-            question_atts = torch.stack(question_atts,0)   
+    @torch.no_grad()
+    def _dequeue_and_enqueue(self, image_feat, text_feat):
+        # gather keys before updating queue
+        image_feats = concat_all_gather(image_feat)
+        text_feats = concat_all_gather(text_feat)
 
-            answer_output = self.text_decoder(answer.input_ids, 
-                                                    attention_mask = answer.attention_mask, 
-                                                    encoder_hidden_states = question_states,
-                                                    encoder_attention_mask = question_atts,                  
-                                                    labels = answer_targets,
-                                                    return_dict = True, reduction = "none")
-            
-            loss = weights * answer_output.loss         
-            loss = loss.sum()/image.size(0)
+        batch_size = image_feats.shape[0]
 
-            # print("Loss:", loss)
+        ptr = int(self.queue_ptr)
+        assert self.queue_size % batch_size == 0  # for simplicity
 
-            return loss
-        else:
-            # question_output = self.text_encoder_1(questions.input_ids, 
-            #                                     attention_mask = questions.attention_mask, 
-            #                                     encoder_hidden_states = image_embeddings,
-            #                                     encoder_attention_mask = image_atts, return_dict = True)
-            # print(question_output)                   
-            topk_ids, topk_probs = self.rank_answer(text_embeddings, questions.attention_mask, 
-                                                    answer.input_ids, answer.attention_mask, k) 
-            return topk_ids, topk_probs
+        # replace the keys at ptr (dequeue and enqueue)
+        self.image_queue[:, ptr:ptr + batch_size] = image_feats.T
+        self.text_queue[:, ptr:ptr + batch_size] = text_feats.T
+        ptr = (ptr + batch_size) % self.queue_size  # move pointer
+
+        self.queue_ptr[0] = ptr 
+    
+
+@torch.no_grad()
+def concat_all_gather(tensor):
+    """
+    Performs all_gather operation on the provided tensors.
+    *** Warning ***: torch.distributed.all_gather has no gradient.
+    """
+    tensors_gather = [torch.ones_like(tensor)
+        for _ in range(torch.distributed.get_world_size())]
+    torch.distributed.all_gather(tensors_gather, tensor, async_op=False)
+
+    output = torch.cat(tensors_gather, dim=0)
+    return output

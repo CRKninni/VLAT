@@ -145,7 +145,7 @@ def main(args, config):
     
     model_without_ddp = model
     if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu])
+        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[0, 2])
         model_without_ddp = model.module    
     
     print("Start training")
@@ -173,7 +173,7 @@ def main(args, config):
             with open(os.path.join(args.output_dir, "log.txt"),"a") as f:
                 f.write(json.dumps(log_stats) + "\n")
 
-        # dist.barrier()  
+        dist.barrier()  
                 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -192,7 +192,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')    
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
-    parser.add_argument('--distributed', default=False, type=bool)
+    parser.add_argument('--distributed', default=True, type=bool)
     args = parser.parse_args()
 
     config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)

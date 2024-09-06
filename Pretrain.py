@@ -7,7 +7,7 @@
 
 import argparse
 import os
-import ruamel_yaml as yaml
+import yaml
 import numpy as np
 import random
 import time
@@ -22,9 +22,10 @@ from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
 import torch.distributed as dist
 
-from models.model_pretrain import ALBEF
+from models.vlat_pretrain import VLAT
 from models.vit import interpolate_pos_embed
-from models.tokenization_bert import BertTokenizer
+from transformers import BertTokenizer
+
 
 import utils
 from dataset import create_dataset, create_sampler, create_loader
@@ -113,11 +114,11 @@ def main(args, config):
 
     data_loader = create_loader(datasets,samplers,batch_size=[config['batch_size']], num_workers=[4], is_trains=[True], collate_fns=[None])[0]
 
-    tokenizer = BertTokenizer.from_pretrained(args.text_encoder)
+    tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
     #### Model #### 
     print("Creating model")
-    model = ALBEF(config=config, text_encoder=args.text_encoder, tokenizer=tokenizer, init_deit=True)
+    model = VLAT()
     
     model = model.to(device)   
         
@@ -172,7 +173,7 @@ def main(args, config):
             with open(os.path.join(args.output_dir, "log.txt"),"a") as f:
                 f.write(json.dumps(log_stats) + "\n")
 
-        dist.barrier()  
+        # dist.barrier()  
                 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
@@ -191,7 +192,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', default=42, type=int)
     parser.add_argument('--world_size', default=1, type=int, help='number of distributed processes')    
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
-    parser.add_argument('--distributed', default=True, type=bool)
+    parser.add_argument('--distributed', default=False, type=bool)
     args = parser.parse_args()
 
     config = yaml.load(open(args.config, 'r'), Loader=yaml.Loader)

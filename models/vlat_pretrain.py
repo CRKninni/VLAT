@@ -1,8 +1,9 @@
 from functools import partial
 from models.xbert import BertLMHeadModel
 from transformers import ViTConfig, ViTModel,BeitConfig, BeitModel
-from transformers import BertConfig, BertModel, BertTokenizer
-from models.xbert import BertForMaskedLM
+from transformers import BertTokenizer
+from models.vit import VisionTransformer, interpolate_pos_embed
+from models.xbert import BertForMaskedLM, BertModel, BertConfig
 import torch
 import timm
 import numpy as np
@@ -89,13 +90,26 @@ class EncoderDecoder(nn.Module):
 
 
 class ImageEncoder(nn.Module):
-    def __init__(self, pretrained=True, image_size=224, output_dim=768):
+    def __init__(self, pretrained=True, image_size=224, output_dim=768, init_deit=True):
         super(ImageEncoder, self).__init__()
-        self.vit_model = ViTModel.from_pretrained('google/vit-base-patch16-224-in21k') if pretrained else ViTModel(ViTConfig(image_size=image_size, patch_size=16, embed_dim=768, mlp_ratio=4, qkv_bias=True, layer_norm_eps=1e-6))
+        # self.vit_model = ViTModel.from_pretrained('google/vit-base-patch16-224-in21k') if pretrained else ViTModel(ViTConfig(image_size=image_size, patch_size=16, embed_dim=768, mlp_ratio=4, qkv_bias=True, layer_norm_eps=1e-6))
         # self.vit_model = ViTModel(ViTConfig(image_size=image_size, patch_size=16, embed_dim=768, mlp_ratio=4, qkv_bias=True, layer_norm_eps=1e-6))
+        self.vit_model = VisionTransformer(
+            img_size=384, patch_size=16, embed_dim=768, depth=12, num_heads=12, 
+            mlp_ratio=4, qkv_bias=True, norm_layer=partial(nn.LayerNorm, eps=1e-6))
+        if init_deit:
+            checkpoint = torch.hub.load_state_dict_from_url(
+                url="https://dl.fbaipublicfiles.com/deit/deit_base_patch16_224-b5f2ef4d.pth",
+                map_location="cpu", check_hash=True)
+            state_dict = checkpoint["model"]
+            pos_embed_reshaped = interpolate_pos_embed(state_dict['pos_embed'], self.vit_model)
+            state_dict['pos_embed'] = pos_embed_reshaped
+            msg = self.vit_model.load_state_dict(state_dict,strict=False) 
+            print(msg)
+
     def forward(self, images):
-        outputs = self.vit_model(images)
-        return outputs.last_hidden_state[:, :-1, :]
+        image_embeds = self.vit_model(images) 
+        return image_embeds
 
 
 class TextEncoder(nn.Module):
@@ -103,11 +117,11 @@ class TextEncoder(nn.Module):
         super(TextEncoder, self).__init__()
         self.tokenizer = BertTokenizer.from_pretrained(model_name)
 
-        text_config_encoder = BertConfig(vocab_size=30522, num_hidden_layers=12, num_attention_heads=12, hidden_size=768, layer_norm_eps=1e-12, max_position_embeddings=768, hidden_act="gelu", hidden_dropout_prob=0.2, initializer_range=0.02, intermediate_size=3072, attention_probs_dropout_prob=0.2)   
+        text_config_encoder = BertConfig(vocab_size=30522, num_hidden_layers=12, encoder_width=768, fusion_layer=6, num_attention_heads=12, hidden_size=768, layer_norm_eps=1e-12, max_position_embeddings=768, hidden_act="gelu", hidden_dropout_prob=0.2, initializer_range=0.02, intermediate_size=3072, attention_probs_dropout_prob=0.2)   
         self.bert = BertModel(config=text_config_encoder)
 
     def forward(self, text):
-        outputs = self.bert(text['input_ids'], attention_mask=text['attention_mask'])
+        outputs = self.bert(text['input_ids'], attention_mask=text['attention_mask'], return_dict = True, mode = 'text')
         return outputs.last_hidden_state
 
 
@@ -129,12 +143,12 @@ class VLAT(nn.Module):
         self.text_encoder_m = TextEncoder()
         self.encoder_decoder_m = EncoderDecoder()
         
-        text_config_encoder = BertConfig(vocab_size=30522, num_hidden_layers=12, num_attention_heads=12, hidden_size=768, layer_norm_eps=1e-12, max_position_embeddings=512, hidden_act="gelu", hidden_dropout_prob=0.2, initializer_range=0.02, intermediate_size=3072, attention_probs_dropout_prob=0.2)   
+        text_config_encoder = BertConfig(vocab_size=30522, fusion_layer=6,encoder_width=768, num_hidden_layers=12, num_attention_heads=12, hidden_size=768, layer_norm_eps=1e-12, max_position_embeddings=512, hidden_act="gelu", hidden_dropout_prob=0.2, initializer_range=0.02, intermediate_size=3072, attention_probs_dropout_prob=0.2)   
         self.text_encoder_1 = BertModel(config=text_config_encoder)
         self.text_encoder_1_m = BertModel(config=text_config_encoder)
         
 
-        bert_config = BertConfig.from_json_file("/home/crk/Desktop/VLAT/configs/config_bert.json")
+        bert_config = BertConfig.from_json_file("/home/beast/Desktop/Daniel/charan_anna/VLAT/configs/config_bert.json")
         self.text_encoder_2 = BertForMaskedLM.from_pretrained("bert-base-uncased", config=bert_config)
         self.text_encoder_2_m = BertForMaskedLM.from_pretrained("bert-base-uncased", config=bert_config)
 
@@ -226,7 +240,8 @@ class VLAT(nn.Module):
                                         inputs_embeds = text_embeddings, 
                                         encoder_hidden_states = image_embeddings,
                                         encoder_attention_mask = image_atts,                             
-                                        return_dict = True)
+                                        return_dict = True,
+                                        mode = 'fusion',)
         with torch.no_grad():
             bs = image.size(0)          
             weights_i2t = F.softmax(sim_i2t[:,:bs],dim=1)
@@ -263,7 +278,8 @@ class VLAT(nn.Module):
                                         inputs_embeds = text_embeds_all, 
                                         encoder_hidden_states = image_embeds_all,
                                         encoder_attention_mask = image_atts_all,                             
-                                        return_dict = True)
+                                        return_dict = True,
+                                        mode = 'fusion',)
 
         vl_embeddings = torch.cat([output_pos.last_hidden_state[:,0,:], output_neg.last_hidden_state[:,0,:]],dim=0)
         vl_output = self.itm_head(vl_embeddings)            

@@ -148,7 +148,7 @@ class VLAT(nn.Module):
         self.text_encoder_1_m = BertModel(config=text_config_encoder)
         
 
-        bert_config = BertConfig.from_json_file("/home/beast/Desktop/Daniel/charan_anna/VLAT/configs/config_bert.json")
+        bert_config = BertConfig.from_json_file("/home/gen/crk/VLAT/configs/config_bert.json")
         self.text_encoder_2 = BertForMaskedLM.from_pretrained("bert-base-uncased", config=bert_config)
         self.text_encoder_2_m = BertForMaskedLM.from_pretrained("bert-base-uncased", config=bert_config)
 
